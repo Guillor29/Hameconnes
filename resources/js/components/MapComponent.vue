@@ -283,6 +283,7 @@ export default {
       markers: [],
       fishingSpots: [],
       fishSpecies: [],
+      currentUser: null,
       waterTypes: [
         { value: 'sea', label: 'Mer' },
         { value: 'river', label: 'Rivière' },
@@ -305,7 +306,7 @@ export default {
         latitude: 0,
         longitude: 0,
         fish_species_ids: [],
-        user_id: 1 // Default user ID, should be replaced with authenticated user ID in production
+        user_id: null // Will be set from currentUser.id
       },
       currentStyle: 'mapbox://styles/mapbox/satellite-streets-v12',
       mapStyles: [
@@ -322,6 +323,7 @@ export default {
     this.initializeMap();
     this.loadFishingSpots();
     this.loadFishSpecies();
+    this.fetchCurrentUser();
 
     // Add click outside listener
     document.addEventListener('click', this.handleClickOutside);
@@ -521,8 +523,18 @@ export default {
         return;
       }
 
+      // Check if user data is available
+      if (!this.currentUser || !this.currentUser.id) {
+        alert('Impossible de récupérer les informations de l\'utilisateur. Veuillez vous reconnecter.');
+        this.isSaving = false;
+        return;
+      }
+
       // Create a copy of the newSpot object to send to the API
       const spotData = { ...this.newSpot };
+
+      // Set the user_id from the currentUser
+      spotData.user_id = this.currentUser.id;
 
       // Log the data being sent (for debugging)
       console.log('Saving fishing spot with data:', spotData);
@@ -630,6 +642,22 @@ export default {
       if (dropdown && !dropdown.contains(event.target)) {
         this.dropdownOpen = false;
       }
+    },
+
+    fetchCurrentUser() {
+      fetch('/api/user')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch user data');
+          }
+          return response.json();
+        })
+        .then(data => {
+          this.currentUser = data;
+        })
+        .catch(error => {
+          console.error('Error fetching user data:', error);
+        });
     },
 
     zoomIn() {
