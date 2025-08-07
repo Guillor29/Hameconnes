@@ -107,7 +107,7 @@ jobs:
       - name: Trigger deployment script on server
         uses: fjogeleit/http-request-action@v1
         with:
-          url: https://hameconnes.guillaume-rv.fr/deploy.php
+          url: https://hameconnes.guillaume-rv.fr/public/deploy.php
           method: 'POST'
           contentType: 'application/json'
           data: '{"token": "${{ steps.deployment_token.outputs.token }}"}'
