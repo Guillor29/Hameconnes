@@ -43,47 +43,47 @@ jobs:
       # Generate the production .env file with all necessary configurations
       - name: Generate .env file
         run: |
-          echo "APP_NAME=Les Hameçonnés" > .env.production
-          echo "APP_ENV=production" >> .env.production
-          echo "APP_KEY=${{ secrets.APP_KEY || 'base64:VJ/YnYBfm7x/PX9vZTuR/mkyEsmgyAhvR/tGtTtYL34=' }}" >> .env.production
-          echo "APP_DEBUG=false" >> .env.production
-          echo "APP_URL=https://hameconnes.guillaume-rv.fr" >> .env.production
+          echo "APP_NAME=Les Hameçonnés" > .env
+          echo "APP_ENV=production" >> .env
+          echo "APP_KEY=${{ secrets.APP_KEY || 'base64:VJ/YnYBfm7x/PX9vZTuR/mkyEsmgyAhvR/tGtTtYL34=' }}" >> .env
+          echo "APP_DEBUG=false" >> .env
+          echo "APP_URL=https://hameconnes.guillaume-rv.fr" >> .env
 
-          echo "APP_LOCALE=fr" >> .env.production
-          echo "APP_FALLBACK_LOCALE=en" >> .env.production
-          echo "APP_FAKER_LOCALE=fr_FR" >> .env.production
+          echo "APP_LOCALE=fr" >> .env
+          echo "APP_FALLBACK_LOCALE=en" >> .env
+          echo "APP_FAKER_LOCALE=fr_FR" >> .env
 
-          echo "LOG_CHANNEL=stack" >> .env.production
-          echo "LOG_LEVEL=error" >> .env.production
+          echo "LOG_CHANNEL=stack" >> .env
+          echo "LOG_LEVEL=error" >> .env
 
-          echo "DB_CONNECTION=mysql" >> .env.production
-          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env.production
-          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env.production
-          echo "DB_DATABASE=${{ secrets.DB_NAME }}" >> .env.production
-          echo "DB_USERNAME=${{ secrets.DB_USER }}" >> .env.production
-          echo "DB_PASSWORD=\"${{ secrets.DB_PASS }}\"" >> .env.production
-          echo "DB_CHARSET=${{ secrets.DB_CHARSET }}" >> .env.production
+          echo "DB_CONNECTION=mysql" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "DB_DATABASE=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_USERNAME=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASSWORD=\"${{ secrets.DB_PASS }}\"" >> .env
+          echo "DB_CHARSET=${{ secrets.DB_CHARSET }}" >> .env
 
-          echo "SESSION_DRIVER=database" >> .env.production
-          echo "SESSION_LIFETIME=120" >> .env.production
-          echo "SESSION_ENCRYPT=true" >> .env.production
+          echo "SESSION_DRIVER=database" >> .env
+          echo "SESSION_LIFETIME=120" >> .env
+          echo "SESSION_ENCRYPT=true" >> .env
 
-          echo "BROADCAST_CONNECTION=log" >> .env.production
-          echo "FILESYSTEM_DISK=local" >> .env.production
-          echo "QUEUE_CONNECTION=database" >> .env.production
+          echo "BROADCAST_CONNECTION=log" >> .env
+          echo "FILESYSTEM_DISK=local" >> .env
+          echo "QUEUE_CONNECTION=database" >> .env
 
-          echo "CACHE_STORE=database" >> .env.production
+          echo "CACHE_STORE=database" >> .env
 
-          echo "MAIL_MAILER=smtp" >> .env.production
-          echo "MAIL_HOST=smtp.mailtrap.io" >> .env.production
-          echo "MAIL_PORT=2525" >> .env.production
-          echo "MAIL_USERNAME=null" >> .env.production
-          echo "MAIL_PASSWORD=null" >> .env.production
-          echo "MAIL_FROM_ADDRESS=noreply@hameconnes.guillaume-rv.fr" >> .env.production
-          echo "MAIL_FROM_NAME=\"Les Hameçonnés\"" >> .env.production
+          echo "MAIL_MAILER=smtp" >> .env
+          echo "MAIL_HOST=smtp.mailtrap.io" >> .env
+          echo "MAIL_PORT=2525" >> .env
+          echo "MAIL_USERNAME=null" >> .env
+          echo "MAIL_PASSWORD=null" >> .env
+          echo "MAIL_FROM_ADDRESS=noreply@hameconnes.guillaume-rv.fr" >> .env
+          echo "MAIL_FROM_NAME=\"Les Hameçonnés\"" >> .env
 
-          echo "VITE_APP_NAME=\"Les Hameçonnés\"" >> .env.production
-          echo "VITE_MAPBOX_TOKEN=\"pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg\"" >> .env.production
+          echo "VITE_APP_NAME=\"Les Hameçonnés\"" >> .env
+          echo "VITE_MAPBOX_TOKEN=\"pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg\"" >> .env
 
       # Create a simple deployment script that will be uploaded to the server
       - name: Create deployment script
@@ -94,9 +94,6 @@ jobs:
 
           # Move to the web root directory
           cd /home/hameconnes/www
-
-          # Rename .env.production to .env
-          mv .env.production .env
 
           # Run Laravel commands
           php artisan config:cache
@@ -124,9 +121,8 @@ jobs:
             **/node_modules/**
             **/vendor/**
             **/tests/**
-            **/.env
             **/.env.*
-            !**/.env.production
+            !**/.env
 
       # Create a PHP deployment script that can be executed via web browser
       - name: Create PHP deployment script
@@ -150,22 +146,7 @@ jobs:
           // Define the base path
           $basePath = dirname(__DIR__);
 
-          // 1. Rename .env.production to .env
-          $envProductionPath = $basePath . '/.env.production';
-          $envPath = $basePath . '/.env';
-
-          if (file_exists($envProductionPath)) {
-              echo "Renaming .env.production to .env\n";
-              if (rename($envProductionPath, $envPath)) {
-                  echo "Successfully renamed .env.production to .env\n";
-              } else {
-                  echo "Failed to rename .env.production to .env\n";
-              }
-          } else {
-              echo ".env.production file not found\n";
-          }
-
-          // 2. Run artisan commands
+          // Run artisan commands
           $phpBinary = PHP_BINARY;
           $artisanPath = $basePath . '/artisan';
 
@@ -223,4 +204,4 @@ jobs:
         run: |
           echo "Deployment files have been uploaded to the server."
           echo "To complete the deployment, visit https://hameconnes.guillaume-rv.fr/public/deploy.php in your browser."
-          echo "This will execute the final deployment steps (renaming .env file and running Laravel commands)."
+          echo "This will execute the final deployment steps (running Laravel commands)."
