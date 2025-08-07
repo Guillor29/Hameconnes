@@ -1,0 +1,57 @@
+version: '3'
+
+services:
+  # PHP Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hameconnes-app
+    restart: unless-stopped
+    volumes:
+      - ./:/var/www/html
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - hameconnes-network
+
+  # Nginx Service
+  webserver:
+    image: nginx:alpine
+    container_name: hameconnes-webserver
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - hameconnes-network
+    depends_on:
+      - app
+
+  # MySQL Service
+  db:
+    image: mysql:8.0
+    container_name: hameconnes-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - hameconnes-network
+
+networks:
+  hameconnes-network:
+    driver: bridge
+
+volumes:
+  dbdata:
+    driver: local
