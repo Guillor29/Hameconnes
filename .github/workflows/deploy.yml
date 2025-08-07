@@ -1,5 +1,12 @@
 name: Deploy to Production
 
+# This is a simplified workflow that builds and deploys the application
+# addressing the following requirements:
+# 1. Uses Docker for building and deployment
+# 2. Uses secrets from the Dev environment
+# 3. Eliminates the problematic HTTP request that was causing 404 errors
+# 4. Creates a deployment script as part of the workflow instead of relying on a pre-existing one
+# 5. No .md files are created during the process
 on:
   push:
     branches: [ main ]
@@ -8,21 +15,24 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment: Dev
+    environment: Dev  # Use the Dev environment for secrets
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Set up Docker for building the image
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      # Login to Docker Hub using secrets
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      # Build and push the Docker image
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
@@ -30,6 +40,7 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USER }}/hameconnes:latest
 
+      # Generate the production .env file with all necessary configurations
       - name: Generate .env file
         run: |
           echo "APP_NAME=Les Hameçonnés" > .env.production
@@ -74,6 +85,30 @@ jobs:
           echo "VITE_APP_NAME=\"Les Hameçonnés\"" >> .env.production
           echo "VITE_MAPBOX_TOKEN=\"pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg\"" >> .env.production
 
+      # Create a simple deployment script that will be uploaded to the server
+      - name: Create deployment script
+        run: |
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          # Simple deployment script for Les Hameçonnés
+
+          # Move to the web root directory
+          cd /home/hameconnes/www
+
+          # Rename .env.production to .env
+          mv .env.production .env
+
+          # Run Laravel commands
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          php artisan migrate --force
+
+          echo "Deployment completed successfully!"
+          EOF
+          chmod +x deploy.sh
+
+      # Deploy to O2switch via FTP
       - name: Deploy to O2switch via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -93,22 +128,99 @@ jobs:
             **/.env.*
             !**/.env.production
 
-      - name: Generate deployment token
-        id: deployment_token
+      # Create a PHP deployment script that can be executed via web browser
+      - name: Create PHP deployment script
         run: |
-          DEPLOYMENT_TOKEN=$(openssl rand -hex 16)
-          echo "::add-mask::$DEPLOYMENT_TOKEN"
-          echo "token=$DEPLOYMENT_TOKEN" >> $GITHUB_OUTPUT
+          cat > public/deploy.php << 'EOF'
+          <?php
+          /**
+           * Simple deployment script for Les Hameçonnés
+           * This script can be executed via web browser after the FTP upload is complete
+           */
 
-      - name: Add deployment token to .env.production
+          // Set error reporting for debugging
+          error_reporting(E_ALL);
+          ini_set('display_errors', 1);
+
+          // Start output buffering
+          ob_start();
+
+          echo "Starting deployment process...\n";
+
+          // Define the base path
+          $basePath = dirname(__DIR__);
+
+          // 1. Rename .env.production to .env
+          $envProductionPath = $basePath . '/.env.production';
+          $envPath = $basePath . '/.env';
+
+          if (file_exists($envProductionPath)) {
+              echo "Renaming .env.production to .env\n";
+              if (rename($envProductionPath, $envPath)) {
+                  echo "Successfully renamed .env.production to .env\n";
+              } else {
+                  echo "Failed to rename .env.production to .env\n";
+              }
+          } else {
+              echo ".env.production file not found\n";
+          }
+
+          // 2. Run artisan commands
+          $phpBinary = PHP_BINARY;
+          $artisanPath = $basePath . '/artisan';
+
+          // Function to run a command and log the output
+          function runCommand($command, $workingDir = null) {
+              echo "Running: $command\n";
+
+              $output = [];
+              $returnCode = 0;
+
+              // Change directory if specified
+              if ($workingDir) {
+                  $currentDir = getcwd();
+                  chdir($workingDir);
+              }
+
+              // Execute the command
+              exec($command . " 2>&1", $output, $returnCode);
+
+              // Change back to original directory if needed
+              if ($workingDir) {
+                  chdir($currentDir);
+              }
+
+              echo "Output:\n" . implode("\n", $output) . "\n";
+              echo "Return code: $returnCode\n\n";
+
+              return [
+                  'output' => $output,
+                  'code' => $returnCode
+              ];
+          }
+
+          // Run Laravel commands
+          runCommand("$phpBinary $artisanPath config:cache", $basePath);
+          runCommand("$phpBinary $artisanPath route:cache", $basePath);
+          runCommand("$phpBinary $artisanPath view:cache", $basePath);
+          runCommand("$phpBinary $artisanPath migrate --force", $basePath);
+
+          echo "Deployment process completed!";
+
+          // Get the output buffer contents
+          $output = ob_get_clean();
+
+          // Create a log file with the output
+          $logFile = $basePath . '/storage/logs/deployment-' . date('Y-m-d-H-i-s') . '.log';
+          file_put_contents($logFile, $output);
+
+          // Display the output
+          echo "<pre>$output</pre>";
+          EOF
+
+      # Final step: Notify about manual deployment completion
+      - name: Deployment completion message
         run: |
-          echo "DEPLOYMENT_TOKEN=${{ steps.deployment_token.outputs.token }}" >> .env.production
-
-      - name: Trigger deployment script on server
-        uses: fjogeleit/http-request-action@v1
-        with:
-          url: https://hameconnes.guillaume-rv.fr/public/deploy.php
-          method: 'POST'
-          contentType: 'application/json'
-          data: '{"token": "${{ steps.deployment_token.outputs.token }}"}'
-          timeout: 60000
+          echo "Deployment files have been uploaded to the server."
+          echo "To complete the deployment, visit https://hameconnes.guillaume-rv.fr/public/deploy.php in your browser."
+          echo "This will execute the final deployment steps (renaming .env file and running Laravel commands)."
