@@ -6,15 +6,7 @@ use Illuminate\Http\Request;
 
 class UserProfileController extends Controller
 {
-    /**
-     * Create a new controller instance.
-     *
-     * @return void
-     */
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
+    // Middleware is applied in the routes file instead of the constructor
 
     /**
      * Display the user's profile.
