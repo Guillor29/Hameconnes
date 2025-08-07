@@ -94,11 +94,13 @@ function runCommand($command, $workingDir = null) {
 // Log the start of deployment
 echo "Starting deployment process at " . date('Y-m-d H:i:s') . "\n\n";
 
-// 1. Rename .env.production to .env
-$envProductionPath = $basePath . '/.env.production';
+// Check for .env file
 $envPath = $basePath . '/.env';
+$envProductionPath = $basePath . '/.env.production';
 
-if (file_exists($envProductionPath)) {
+if (file_exists($envPath)) {
+    echo ".env file already exists\n\n";
+} elseif (file_exists($envProductionPath)) {
     echo "Renaming .env.production to .env\n";
     if (rename($envProductionPath, $envPath)) {
         echo "Successfully renamed .env.production to .env\n\n";
@@ -106,7 +108,7 @@ if (file_exists($envProductionPath)) {
         echo "Failed to rename .env.production to .env\n\n";
     }
 } else {
-    echo ".env.production file not found\n\n";
+    echo "Warning: Neither .env nor .env.production file found\n\n";
 }
 
 // 2. Run artisan commands

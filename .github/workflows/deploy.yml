@@ -105,6 +105,24 @@ jobs:
           EOF
           chmod +x deploy.sh
 
+      # Generate vendor directory using Docker
+      - name: Generate vendor directory
+        run: |
+          docker run --rm \
+            -v $(pwd):/app \
+            -w /app \
+            composer:latest \
+            composer install --no-dev --optimize-autoloader
+
+      # Generate node_modules and build assets using Docker
+      - name: Generate node_modules and build assets
+        run: |
+          docker run --rm \
+            -v $(pwd):/app \
+            -w /app \
+            node:20-alpine \
+            sh -c "npm install && npm run build"
+
       # Deploy to O2switch via FTP
       - name: Deploy to O2switch via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
@@ -118,8 +136,6 @@ jobs:
           exclude: |
             **/.git*
             **/.git*/**
-            **/node_modules/**
-            **/vendor/**
             **/tests/**
             **/.env.*
             !**/.env
@@ -203,5 +219,6 @@ jobs:
       - name: Deployment completion message
         run: |
           echo "Deployment files have been uploaded to the server."
+          echo "The vendor and node_modules directories have been generated using Docker and included in the deployment."
           echo "To complete the deployment, visit https://hameconnes.guillaume-rv.fr/public/deploy.php in your browser."
           echo "This will execute the final deployment steps (running Laravel commands)."
