@@ -93,17 +93,22 @@ jobs:
             **/.env.*
             !**/.env.production
 
-      - name: Rename .env.production to .env on server
-        uses: appleboy/ssh-action@master
+      - name: Generate deployment token
+        id: deployment_token
+        run: |
+          DEPLOYMENT_TOKEN=$(openssl rand -hex 16)
+          echo "::add-mask::$DEPLOYMENT_TOKEN"
+          echo "token=$DEPLOYMENT_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Add deployment token to .env.production
+        run: |
+          echo "DEPLOYMENT_TOKEN=${{ steps.deployment_token.outputs.token }}" >> .env.production
+
+      - name: Trigger deployment script on server
+        uses: fjogeleit/http-request-action@v1
         with:
-          host: ${{ secrets.FTP_IP }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 22
-          script: |
-            cd /home/hameconnes/www
-            mv .env.production .env
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-            php artisan migrate --force
+          url: https://hameconnes.guillaume-rv.fr/deploy.php
+          method: 'POST'
+          contentType: 'application/json'
+          data: '{"token": "${{ steps.deployment_token.outputs.token }}"}'
+          timeout: 60000

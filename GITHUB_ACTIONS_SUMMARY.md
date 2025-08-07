@@ -30,8 +30,9 @@
 - Utilisation de l'environnement GitHub "Dev" pour accéder aux secrets
 - Construction et push de l'image Docker vers Docker Hub
 - Génération d'un fichier .env pour la production
+- Génération d'un token de déploiement sécurisé
 - Déploiement via FTP vers le serveur O2switch
-- Configuration finale sur le serveur (cache, migrations)
+- Exécution d'un script PHP de déploiement via HTTP pour les tâches finales (renommage .env, cache, migrations)
 
 ### 3. Utilisation des Secrets GitHub dans l'Environnement Dev
 - Tous les secrets sont stockés dans l'environnement GitHub "Dev" (et non comme secrets de dépôt)

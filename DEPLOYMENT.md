@@ -6,7 +6,7 @@ Ce document explique comment déployer l'application Les Hameçonnés en product
 
 - Un compte GitHub avec le code source de l'application
 - Un compte Docker Hub pour stocker l'image Docker
-- Un hébergement O2switch avec accès FTP et SSH
+- Un hébergement O2switch avec accès FTP
 - Les secrets GitHub configurés (voir ci-dessous)
 
 ## Configuration des Secrets GitHub dans l'Environnement Dev
@@ -37,7 +37,7 @@ Pour que le déploiement fonctionne correctement, vous devez configurer les secr
 - `FTP_PORT` : Le port FTP (ex: 21)
 - `FTP_USER` : L'utilisateur FTP (ex: hameconnes@hameconnes.guillaume-rv.fr)
 - `FTP_PASSWORD` : Le mot de passe FTP
-- `FTP_IP` : L'adresse IP du serveur pour SSH (ex: 109.234.165.93)
+- `FTP_IP` : L'adresse IP du serveur (ex: 109.234.165.93)
 
 ### Secrets Docker
 
@@ -55,8 +55,9 @@ Le processus de déploiement comprend les étapes suivantes :
 3. **Connexion à Docker Hub** : Authentification avec les identifiants Docker Hub
 4. **Build et push de l'image Docker** : Construction de l'image Docker et envoi vers Docker Hub
 5. **Génération du fichier .env** : Création d'un fichier .env pour la production
-6. **Déploiement via FTP** : Transfert des fichiers vers le serveur O2switch
-7. **Configuration finale sur le serveur** : Renommage du fichier .env, mise en cache des configurations et exécution des migrations
+6. **Génération d'un token de déploiement** : Création d'un token sécurisé pour l'authentification du script de déploiement
+7. **Déploiement via FTP** : Transfert des fichiers vers le serveur O2switch
+8. **Exécution du script de déploiement** : Appel HTTP au script de déploiement qui effectue les tâches finales (renommage du fichier .env, mise en cache des configurations et exécution des migrations)
 
 ## Structure Docker
 
