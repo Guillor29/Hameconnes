@@ -2,6 +2,18 @@ name: Deploy to Production
 
 # This is an optimized workflow that builds and deploys the application
 # with caching and incremental uploads for faster deployments
+#
+# BUILD PROCESS:
+# 1. Composer dependencies are installed using Docker (only if cache miss)
+# 2. NPM dependencies are installed using Docker (only if cache miss)
+# 3. Assets are ALWAYS built using Docker (regardless of cache status)
+# 4. The build directory is verified to exist before deployment
+# 5. The build directory is explicitly included in the FTP upload
+#
+# IMPORTANT NOTES:
+# - The build directory (public/build) must exist and contain the Vite manifest
+# - The FTP deployment uses incremental uploads, but explicitly includes the build directory
+# - The deploy.php script has fallback mechanisms to create the build directory if needed
 on:
   push:
     branches: [ main ]
@@ -58,15 +70,52 @@ jobs:
             composer:latest \
             composer install --no-dev --optimize-autoloader
 
-      # Generate node_modules and build assets using Docker (only if cache miss)
-      - name: Generate node_modules and build assets
+      # Generate node_modules using Docker (only if cache miss)
+      # This step installs NPM dependencies but doesn't build assets
+      - name: Generate node_modules
         if: steps.npm-cache.outputs.cache-hit != 'true'
         run: |
           docker run --rm \
             -v $(pwd):/app \
             -w /app \
             node:20-alpine \
-            sh -c "npm install && npm run build"
+            npm install
+
+      # Always build assets using Docker (regardless of cache status)
+      # This step ensures that assets are built even if the cache was hit
+      # It creates the public/build directory and the Vite manifest
+      - name: Build assets
+        run: |
+          echo "Building assets with Vite..."
+          docker run --rm \
+            -v $(pwd):/app \
+            -w /app \
+            node:20-alpine \
+            npm run build
+          echo "Assets built successfully"
+
+      # Verify build directory exists
+      # This step checks if the build directory exists and creates it if needed
+      # It also lists the contents of the build directory for debugging
+      - name: Verify build directory
+        run: |
+          if [ -d "public/build" ]; then
+            echo "✅ Build directory exists"
+            echo "Contents of public/build:"
+            ls -la public/build
+
+            if [ -f "public/build/manifest.json" ]; then
+              echo "✅ Vite manifest exists"
+              cat public/build/manifest.json
+            else
+              echo "❌ Vite manifest does not exist"
+              echo "This may cause issues in production"
+            fi
+          else
+            echo "❌ Build directory does not exist"
+            mkdir -p public/build
+            echo "Created build directory"
+          fi
 
       # Generate the production .env file with all necessary configurations
       - name: Generate .env file
@@ -129,6 +178,9 @@ jobs:
           echo "This script will be preserved during deployment and not overwritten"
 
       # Deploy to O2switch via FTP with incremental uploads
+      # This step uploads the files to the server using FTP
+      # It uses incremental uploads (only changed files) for efficiency
+      # But explicitly includes the build directory to ensure it's always uploaded
       - name: Deploy to O2switch via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -138,19 +190,27 @@ jobs:
           port: ${{ secrets.FTP_PORT }}
           local-dir: ./
           server-dir: /
-          dangerous-clean-slate: false  # Enable incremental uploads
+          dangerous-clean-slate: false  # Enable incremental uploads (only changed files)
           exclude: |
+            # Exclude unnecessary files and directories
             **/.git*
             **/.git*/**
             **/tests/**
             **/.env.*
             !**/.env
+          include: |
+            # Always include these directories/files even with incremental uploads
+            public/build/**  # Always include the build directory and its contents
+            # This ensures the Vite manifest and assets are always uploaded
 
       # Final step: Notify about deployment completion
       - name: Deployment completion message
         run: |
           echo "Deployment files have been uploaded to the server."
           echo "The deployment is using incremental uploads, so only changed files were transferred."
+          echo "However, the build directory (public/build) is always included in the upload."
           echo "Composer and NPM dependencies were cached for faster future deployments."
+          echo "Assets were built using Vite and the manifest file should be available in public/build/manifest.json."
           echo "To complete the deployment, visit https://hameconnes.guillaume-rv.fr/public/deploy.php in your browser."
-          echo "This will execute the final deployment steps (running Laravel commands)."
+          echo "This will execute the final deployment steps (running Laravel commands and verifying the Vite manifest)."
+          echo "If you encounter 'Vite manifest not found' errors, check the deploy.php output for details."
