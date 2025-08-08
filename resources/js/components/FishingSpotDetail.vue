@@ -192,8 +192,11 @@ export default {
     initializeMap() {
       if (!this.spot) return;
 
-      // Use the Mapbox access token from environment variables
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+      // Use the global Mapbox token set in bootstrap.js
+      console.log('FishingSpotDetail using global MAPBOX_TOKEN:', window.MAPBOX_TOKEN);
+
+      // Set the Mapbox access token
+      mapboxgl.accessToken = window.MAPBOX_TOKEN;
 
       this.map = new mapboxgl.Map({
         container: 'detail-map',
