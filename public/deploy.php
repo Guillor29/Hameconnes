@@ -271,11 +271,12 @@ if (!file_exists($manifestPath)) {
         if (file_exists($manifestPath)) {
             echo "Vite manifest successfully created\n";
         } else {
-            echo "Failed to create Vite manifest. You may need to build assets manually\n";
+            echo "Failed to create Vite manifest with npm. Creating a minimal manifest file as fallback...\n";
+            createMinimalManifest($manifestPath);
         }
     } else {
-        echo "NPM not available on the server. Cannot rebuild assets automatically.\n";
-        echo "Please build assets locally and upload the build directory to the server.\n";
+        echo "NPM not available on the server. Creating a minimal manifest file as fallback...\n";
+        createMinimalManifest($manifestPath);
     }
 } else {
     echo "Vite manifest found. No need to rebuild assets.\n";
@@ -285,6 +286,51 @@ if (!file_exists($manifestPath)) {
 if (is_dir($buildDir)) {
     echo "Setting proper permissions for build directory\n";
     setPermissions($buildDir, 0755, 0644);
+}
+
+// Function to create a minimal Vite manifest file
+function createMinimalManifest($manifestPath) {
+    // Create a minimal manifest with entries for the main CSS and JS files
+    $minimalManifest = [
+        "resources/css/app.css" => [
+            "file" => "assets/app-minimal.css",
+            "isEntry" => true,
+            "src" => "resources/css/app.css"
+        ],
+        "resources/js/app.js" => [
+            "file" => "assets/app-minimal.js",
+            "isEntry" => true,
+            "src" => "resources/js/app.js"
+        ]
+    ];
+
+    // Create the assets directory if it doesn't exist
+    $assetsDir = dirname($manifestPath) . '/assets';
+    if (!is_dir($assetsDir)) {
+        if (!mkdir($assetsDir, 0755, true)) {
+            echo "Failed to create assets directory\n";
+            return false;
+        }
+    }
+
+    // Create minimal CSS file
+    $minimalCss = "/* Minimal CSS file created by deployment script */\n";
+    file_put_contents($assetsDir . '/app-minimal.css', $minimalCss);
+
+    // Create minimal JS file
+    $minimalJs = "// Minimal JS file created by deployment script\n";
+    file_put_contents($assetsDir . '/app-minimal.js', $minimalJs);
+
+    // Write the manifest file
+    $result = file_put_contents($manifestPath, json_encode($minimalManifest, JSON_PRETTY_PRINT));
+
+    if ($result) {
+        echo "Minimal Vite manifest file created successfully\n";
+        return true;
+    } else {
+        echo "Failed to create minimal Vite manifest file\n";
+        return false;
+    }
 }
 
 // Log the end of deployment

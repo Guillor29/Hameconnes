@@ -121,87 +121,12 @@ jobs:
           echo "Changed files:" >> deployment-manifest.txt
           echo "${{ steps.changed-files.outputs.all_changed_files }}" >> deployment-manifest.txt
 
-      # Create a PHP deployment script that can be executed via web browser
-      - name: Create PHP deployment script
+      # Note: We're no longer creating a simplified deploy.php script
+      # The enhanced deploy.php script with Vite manifest handling will be used instead
+      - name: Add note about deploy.php
         run: |
-          cat > public/deploy.php << 'EOF'
-          <?php
-          /**
-           * Simple deployment script for Les Hameçonnés
-           * This script can be executed via web browser after the FTP upload is complete
-           */
-
-          // Set error reporting for debugging
-          error_reporting(E_ALL);
-          ini_set('display_errors', 1);
-
-          // Start output buffering
-          ob_start();
-
-          echo "Starting deployment process...\n";
-
-          // Define the base path
-          $basePath = dirname(__DIR__);
-
-          // Check for .env file
-          $envPath = $basePath . '/.env';
-          if (!file_exists($envPath)) {
-              echo "Error: .env file not found\n";
-              exit(1);
-          }
-
-          // Run artisan commands
-          $phpBinary = PHP_BINARY;
-          $artisanPath = $basePath . '/artisan';
-
-          // Function to run a command and log the output
-          function runCommand($command, $workingDir = null) {
-              echo "Running: $command\n";
-
-              $output = [];
-              $returnCode = 0;
-
-              // Change directory if specified
-              if ($workingDir) {
-                  $currentDir = getcwd();
-                  chdir($workingDir);
-              }
-
-              // Execute the command
-              exec($command . " 2>&1", $output, $returnCode);
-
-              // Change back to original directory if needed
-              if ($workingDir) {
-                  chdir($currentDir);
-              }
-
-              echo "Output:\n" . implode("\n", $output) . "\n";
-              echo "Return code: $returnCode\n\n";
-
-              return [
-                  'output' => $output,
-                  'code' => $returnCode
-              ];
-          }
-
-          // Run Laravel commands
-          runCommand("$phpBinary $artisanPath config:cache", $basePath);
-          runCommand("$phpBinary $artisanPath route:cache", $basePath);
-          runCommand("$phpBinary $artisanPath view:cache", $basePath);
-          runCommand("$phpBinary $artisanPath migrate --force", $basePath);
-
-          echo "Deployment process completed!";
-
-          // Get the output buffer contents
-          $output = ob_get_clean();
-
-          // Create a log file with the output
-          $logFile = $basePath . '/storage/logs/deployment-' . date('Y-m-d-H-i-s') . '.log';
-          file_put_contents($logFile, $output);
-
-          // Display the output
-          echo "<pre>$output</pre>";
-          EOF
+          echo "Using the enhanced deploy.php script that includes Vite manifest handling"
+          echo "This script will be preserved during deployment and not overwritten"
 
       # Deploy to O2switch via FTP with incremental uploads
       - name: Deploy to O2switch via FTP
