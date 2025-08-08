@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WelcomeNewUser;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -46,15 +48,22 @@ class UserController extends Controller
             'role' => ['required', Rule::in(['user', 'admin'])],
         ]);
 
-        User::create([
+        // Store the plain text password before hashing it
+        $plainPassword = $request->password;
+
+        // Create the user with the hashed password
+        $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => Hash::make($plainPassword),
             'role' => $request->role,
         ]);
 
+        // Send welcome email with login credentials
+        Mail::to($user->email)->send(new WelcomeNewUser($user, $plainPassword));
+
         return redirect()->route('admin.users.index')
-            ->with('success', 'Utilisateur créé avec succès.');
+            ->with('success', 'Utilisateur créé avec succès. Un email avec les identifiants a été envoyé.');
     }
 
     /**
@@ -89,15 +98,27 @@ class UserController extends Controller
             'role' => $request->role,
         ];
 
+        $passwordChanged = false;
+        $plainPassword = null;
+
         // Only update password if provided
         if ($request->filled('password')) {
             $request->validate([
                 'password' => ['string', 'min:6', 'confirmed'],
             ]);
-            $data['password'] = Hash::make($request->password);
+            $plainPassword = $request->password;
+            $data['password'] = Hash::make($plainPassword);
+            $passwordChanged = true;
         }
 
         $user->update($data);
+
+        // Send email with new credentials if password was changed
+        if ($passwordChanged && $plainPassword) {
+            Mail::to($user->email)->send(new WelcomeNewUser($user, $plainPassword));
+            return redirect()->route('admin.users.index')
+                ->with('success', 'Utilisateur mis à jour avec succès. Un email avec les nouveaux identifiants a été envoyé.');
+        }
 
         return redirect()->route('admin.users.index')
             ->with('success', 'Utilisateur mis à jour avec succès.');

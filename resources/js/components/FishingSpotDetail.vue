@@ -193,7 +193,6 @@ export default {
       if (!this.spot) return;
 
       // Use the global Mapbox token set in bootstrap.js
-      console.log('FishingSpotDetail using global MAPBOX_TOKEN:', window.MAPBOX_TOKEN);
 
       // Set the Mapbox access token
       mapboxgl.accessToken = window.MAPBOX_TOKEN;

@@ -337,7 +337,6 @@ export default {
   methods: {
     initializeMap() {
       // Use the global Mapbox token set in bootstrap.js
-      console.log('MapComponent using global MAPBOX_TOKEN:', window.MAPBOX_TOKEN);
 
       // Set the Mapbox access token
       mapboxgl.accessToken = window.MAPBOX_TOKEN;

@@ -155,6 +155,7 @@ jobs:
           echo "MAIL_HOST=${{ secrets.SMTP_HOST }}" >> .env
           echo "MAIL_PORT=${{ secrets.SMTP_PORT }}" >> .env
           echo "MAIL_ENCRYPTION=tls" >> .env
+          echo "MAIL_SCHEME=smtp" >> .env
           echo "MAIL_USERNAME=${{ secrets.SMTP_USERNAME }}" >> .env
           echo "MAIL_PASSWORD=\"${{ secrets.SMTP_PASSWORD }}\"" >> .env
           echo "MAIL_FROM_ADDRESS=${{ secrets.SMTP_FROM }}" >> .env
