@@ -128,7 +128,7 @@ if (file_exists($envPath)) {
     echo "Updating .env file with production settings\n";
     $envContent = file_get_contents($envPath);
 
-    // Extract database credentials before updating
+    // Extract database credentials and Vite environment variables before updating
     $dbCredentials = [];
     if (preg_match('/DB_HOST=(.*)/', $envContent, $matches)) {
         $dbCredentials['DB_HOST'] = trim($matches[1]);
@@ -147,6 +147,12 @@ if (file_exists($envPath)) {
     }
     if (preg_match('/DB_CHARSET=(.*)/', $envContent, $matches)) {
         $dbCredentials['DB_CHARSET'] = trim($matches[1]);
+    }
+
+    // Extract Vite environment variables
+    $viteEnvVars = [];
+    if (preg_match('/VITE_MAPBOX_TOKEN=(.*)/', $envContent, $matches)) {
+        $viteEnvVars['VITE_MAPBOX_TOKEN'] = trim($matches[1]);
     }
 
     // Update APP_ENV to production
@@ -182,6 +188,22 @@ if (file_exists($envPath)) {
     if (!empty($dbCredentials['DB_CHARSET'])) {
         $envContent = preg_replace('/DB_CHARSET=.*/', 'DB_CHARSET=' . $dbCredentials['DB_CHARSET'], $envContent);
         echo "Preserved DB_CHARSET: " . $dbCredentials['DB_CHARSET'] . "\n";
+    }
+
+    // Restore Vite environment variables
+    if (!empty($viteEnvVars['VITE_MAPBOX_TOKEN'])) {
+        $envContent = preg_replace('/VITE_MAPBOX_TOKEN=.*/', 'VITE_MAPBOX_TOKEN=' . $viteEnvVars['VITE_MAPBOX_TOKEN'], $envContent);
+        echo "Preserved VITE_MAPBOX_TOKEN: (value hidden for security)\n";
+    } else {
+        // If VITE_MAPBOX_TOKEN is not found in the existing .env file, add it
+        $mapboxToken = "pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg";
+        if (strpos($envContent, 'VITE_MAPBOX_TOKEN') === false) {
+            $envContent .= "\nVITE_MAPBOX_TOKEN=\"" . $mapboxToken . "\"\n";
+            echo "Added VITE_MAPBOX_TOKEN to .env file\n";
+        } else {
+            $envContent = preg_replace('/VITE_MAPBOX_TOKEN=.*/', 'VITE_MAPBOX_TOKEN="' . $mapboxToken . '"', $envContent);
+            echo "Updated VITE_MAPBOX_TOKEN in .env file\n";
+        }
     }
 
     // Write the updated content back to the .env file
