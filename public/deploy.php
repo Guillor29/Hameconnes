@@ -104,6 +104,27 @@ if (file_exists($envPath)) {
     echo "Updating .env file with production settings\n";
     $envContent = file_get_contents($envPath);
 
+    // Extract database credentials before updating
+    $dbCredentials = [];
+    if (preg_match('/DB_HOST=(.*)/', $envContent, $matches)) {
+        $dbCredentials['DB_HOST'] = trim($matches[1]);
+    }
+    if (preg_match('/DB_PORT=(.*)/', $envContent, $matches)) {
+        $dbCredentials['DB_PORT'] = trim($matches[1]);
+    }
+    if (preg_match('/DB_DATABASE=(.*)/', $envContent, $matches)) {
+        $dbCredentials['DB_DATABASE'] = trim($matches[1]);
+    }
+    if (preg_match('/DB_USERNAME=(.*)/', $envContent, $matches)) {
+        $dbCredentials['DB_USERNAME'] = trim($matches[1]);
+    }
+    if (preg_match('/DB_PASSWORD=(.*)/', $envContent, $matches)) {
+        $dbCredentials['DB_PASSWORD'] = trim($matches[1]);
+    }
+    if (preg_match('/DB_CHARSET=(.*)/', $envContent, $matches)) {
+        $dbCredentials['DB_CHARSET'] = trim($matches[1]);
+    }
+
     // Update APP_ENV to production
     $envContent = preg_replace('/APP_ENV=.*/', 'APP_ENV=production', $envContent);
 
@@ -112,6 +133,32 @@ if (file_exists($envPath)) {
 
     // Update APP_URL to the actual domain
     $envContent = preg_replace('/APP_URL=.*/', 'APP_URL=https://hameconnes.guillaume-rv.fr', $envContent);
+
+    // Restore database credentials
+    if (!empty($dbCredentials['DB_HOST'])) {
+        $envContent = preg_replace('/DB_HOST=.*/', 'DB_HOST=' . $dbCredentials['DB_HOST'], $envContent);
+        echo "Preserved DB_HOST: " . $dbCredentials['DB_HOST'] . "\n";
+    }
+    if (!empty($dbCredentials['DB_PORT'])) {
+        $envContent = preg_replace('/DB_PORT=.*/', 'DB_PORT=' . $dbCredentials['DB_PORT'], $envContent);
+        echo "Preserved DB_PORT: " . $dbCredentials['DB_PORT'] . "\n";
+    }
+    if (!empty($dbCredentials['DB_DATABASE'])) {
+        $envContent = preg_replace('/DB_DATABASE=.*/', 'DB_DATABASE=' . $dbCredentials['DB_DATABASE'], $envContent);
+        echo "Preserved DB_DATABASE: " . $dbCredentials['DB_DATABASE'] . "\n";
+    }
+    if (!empty($dbCredentials['DB_USERNAME'])) {
+        $envContent = preg_replace('/DB_USERNAME=.*/', 'DB_USERNAME=' . $dbCredentials['DB_USERNAME'], $envContent);
+        echo "Preserved DB_USERNAME: " . $dbCredentials['DB_USERNAME'] . "\n";
+    }
+    if (!empty($dbCredentials['DB_PASSWORD'])) {
+        $envContent = preg_replace('/DB_PASSWORD=.*/', 'DB_PASSWORD=' . $dbCredentials['DB_PASSWORD'], $envContent);
+        echo "Preserved DB_PASSWORD: (value hidden for security)\n";
+    }
+    if (!empty($dbCredentials['DB_CHARSET'])) {
+        $envContent = preg_replace('/DB_CHARSET=.*/', 'DB_CHARSET=' . $dbCredentials['DB_CHARSET'], $envContent);
+        echo "Preserved DB_CHARSET: " . $dbCredentials['DB_CHARSET'] . "\n";
+    }
 
     // Write the updated content back to the .env file
     if (file_put_contents($envPath, $envContent)) {
@@ -193,6 +240,52 @@ runCommand("$phpBinary $artisanPath view:cache", $basePath);
 
 // Run migrations
 runCommand("$phpBinary $artisanPath migrate --force", $basePath);
+
+// Check for Vite manifest and rebuild assets if needed
+$manifestPath = $basePath . '/public/build/manifest.json';
+$buildDir = $basePath . '/public/build';
+
+echo "Checking for Vite manifest at: $manifestPath\n";
+if (!file_exists($manifestPath)) {
+    echo "Vite manifest not found. Checking if build directory exists...\n";
+
+    // Create build directory if it doesn't exist
+    if (!is_dir($buildDir)) {
+        echo "Build directory not found. Creating it...\n";
+        if (!mkdir($buildDir, 0755, true)) {
+            echo "Failed to create build directory\n";
+        } else {
+            echo "Build directory created successfully\n";
+        }
+    }
+
+    // Check if npm is available
+    $npmCheckResult = runCommand("which npm || where npm 2>/dev/null", $basePath);
+    if ($npmCheckResult['code'] === 0) {
+        echo "NPM is available. Attempting to rebuild assets...\n";
+
+        // Install dependencies and build assets
+        runCommand("npm install", $basePath);
+        runCommand("npm run build", $basePath);
+
+        if (file_exists($manifestPath)) {
+            echo "Vite manifest successfully created\n";
+        } else {
+            echo "Failed to create Vite manifest. You may need to build assets manually\n";
+        }
+    } else {
+        echo "NPM not available on the server. Cannot rebuild assets automatically.\n";
+        echo "Please build assets locally and upload the build directory to the server.\n";
+    }
+} else {
+    echo "Vite manifest found. No need to rebuild assets.\n";
+}
+
+// Set proper permissions for build directory if it exists
+if (is_dir($buildDir)) {
+    echo "Setting proper permissions for build directory\n";
+    setPermissions($buildDir, 0755, 0644);
+}
 
 // Log the end of deployment
 echo "\nDeployment process completed at " . date('Y-m-d H:i:s');
