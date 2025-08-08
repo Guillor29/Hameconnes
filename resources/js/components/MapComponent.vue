@@ -363,7 +363,36 @@ export default {
 
       // Add click event to add new fishing spots
       this.map.on('click', (e) => {
-        this.handleMapClick(e);
+        // Check if fishing spots have been loaded
+        if (!this.fishingSpots || this.fishingSpots.length === 0) {
+          // If no fishing spots are loaded yet, just open the modal
+          this.handleMapClick(e);
+          return;
+        }
+
+        // Check if the click is near any existing fishing spot
+        const clickLng = e.lngLat.lng;
+        const clickLat = e.lngLat.lat;
+
+        // Find if any existing spot is near the click
+        const nearbySpot = this.fishingSpots.find(spot => {
+          // Make sure spot has valid coordinates
+          if (!spot.longitude || !spot.latitude) return false;
+
+          // Calculate distance (approximate)
+          const dx = (clickLng - spot.longitude) * Math.cos((clickLat + spot.latitude) / 2);
+          const dy = clickLat - spot.latitude;
+          const distance = Math.sqrt(dx * dx + dy * dy) * 111000; // Rough conversion to meters
+
+          // Consider it a click on a marker if within 15 meters
+          return distance < 15;
+        });
+
+        // Only open the "Add new fishing spot" modal if the click was not near an existing spot
+        if (!nearbySpot) {
+          this.handleMapClick(e);
+        }
+        // If click was near a spot, the marker's popup will handle the click
       });
     },
 
