@@ -161,9 +161,8 @@ export default {
         });
     },
     viewSpeciesDetails(speciesId) {
-      // This would typically navigate to a details page
-      console.log('View details for species ID:', speciesId);
-      // Example: this.$router.push(`/fish-species/${speciesId}`);
+      // Navigate to the details page
+      window.location.href = `/fish-species/${speciesId}`;
     }
   }
 };

@@ -11,10 +11,10 @@
               <a href="#" class="px-3 py-2 rounded-md text-sm font-medium bg-blue-900 text-white">
                 Accueil
               </a>
-              <a href="#" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
+              <a href="/fishing-spots" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
                 Spots de pêche
               </a>
-              <a href="#" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
+              <a href="/fish-species" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
                 Espèces de poissons
               </a>
               <a href="#" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
@@ -90,10 +90,10 @@
         <a href="#" class="block px-3 py-2 rounded-md text-base font-medium bg-blue-900 text-white">
           Accueil
         </a>
-        <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
+        <a href="/fishing-spots" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
           Spots de pêche
         </a>
-        <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
+        <a href="/fish-species" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
           Espèces de poissons
         </a>
         <a href="#" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-blue-700 hover:text-white">

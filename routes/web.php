@@ -20,6 +20,24 @@ Route::middleware('auth')->group(function () {
         return view('app');
     });
 
+    // Fishing spots routes
+    Route::get('/fishing-spots', function () {
+        return view('fishing-spots.index');
+    })->name('fishing-spots.index');
+
+    Route::get('/fishing-spots/{id}', function ($id) {
+        return view('fishing-spots.show', ['spotId' => $id]);
+    })->name('fishing-spots.show');
+
+    // Fish species routes
+    Route::get('/fish-species', function () {
+        return view('fish-species.index');
+    })->name('fish-species.index');
+
+    Route::get('/fish-species/{id}', function ($id) {
+        return view('fish-species.show', ['speciesId' => $id]);
+    })->name('fish-species.show');
+
     // User profile routes
     Route::get('/profile', [\App\Http\Controllers\UserProfileController::class, 'show'])->name('profile.show');
     Route::get('/profile/edit', [\App\Http\Controllers\UserProfileController::class, 'edit'])->name('profile.edit');
