@@ -1,29 +1,45 @@
 name: Deploy to Production
 
-# This is a simplified workflow that builds and deploys the application
-# addressing the following requirements:
-# 1. Uses Docker for building and deployment
-# 2. Uses secrets from the Dev environment
-# 3. Eliminates the problematic HTTP request that was causing 404 errors
-# 4. Creates a deployment script as part of the workflow instead of relying on a pre-existing one
-# 5. No .md files are created during the process
+# This is an optimized workflow that builds and deploys the application
+# with caching and incremental uploads for faster deployments
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    environment: Dev  # Use the Dev environment for secrets
+    environment: Dev
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Needed for changed files detection
 
-      # Set up Docker for building the image
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v35
+
+      - name: Cache Composer dependencies
+        id: composer-cache
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Cache NPM dependencies
+        id: npm-cache
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
 
       # Login to Docker Hub using secrets
       - name: Login to Docker Hub
@@ -32,13 +48,25 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # Build and push the Docker image
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKER_USER }}/hameconnes:latest
+      # Generate vendor directory using Docker (only if cache miss)
+      - name: Generate vendor directory
+        if: steps.composer-cache.outputs.cache-hit != 'true'
+        run: |
+          docker run --rm \
+            -v $(pwd):/app \
+            -w /app \
+            composer:latest \
+            composer install --no-dev --optimize-autoloader
+
+      # Generate node_modules and build assets using Docker (only if cache miss)
+      - name: Generate node_modules and build assets
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: |
+          docker run --rm \
+            -v $(pwd):/app \
+            -w /app \
+            node:20-alpine \
+            sh -c "npm install && npm run build"
 
       # Generate the production .env file with all necessary configurations
       - name: Generate .env file
@@ -85,60 +113,13 @@ jobs:
           echo "VITE_APP_NAME=\"Les Hameçonnés\"" >> .env
           echo "VITE_MAPBOX_TOKEN=\"pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg\"" >> .env
 
-      # Create a simple deployment script that will be uploaded to the server
-      - name: Create deployment script
+      # Create deployment manifest for tracking changes
+      - name: Create deployment manifest
         run: |
-          cat > deploy.sh << 'EOF'
-          #!/bin/bash
-          # Simple deployment script for Les Hameçonnés
-
-          # Move to the web root directory
-          cd /home/hameconnes/www
-
-          # Run Laravel commands
-          php artisan config:cache
-          php artisan route:cache
-          php artisan view:cache
-          php artisan migrate --force
-
-          echo "Deployment completed successfully!"
-          EOF
-          chmod +x deploy.sh
-
-      # Generate vendor directory using Docker
-      - name: Generate vendor directory
-        run: |
-          docker run --rm \
-            -v $(pwd):/app \
-            -w /app \
-            composer:latest \
-            composer install --no-dev --optimize-autoloader
-
-      # Generate node_modules and build assets using Docker
-      - name: Generate node_modules and build assets
-        run: |
-          docker run --rm \
-            -v $(pwd):/app \
-            -w /app \
-            node:20-alpine \
-            sh -c "npm install && npm run build"
-
-      # Deploy to O2switch via FTP
-      - name: Deploy to O2switch via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: ${{ secrets.FTP_PORT }}
-          local-dir: ./
-          server-dir: /
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/tests/**
-            **/.env.*
-            !**/.env
+          echo "Last deployment: $(date)" > deployment-manifest.txt
+          echo "Commit: ${{ github.sha }}" >> deployment-manifest.txt
+          echo "Changed files:" >> deployment-manifest.txt
+          echo "${{ steps.changed-files.outputs.all_changed_files }}" >> deployment-manifest.txt
 
       # Create a PHP deployment script that can be executed via web browser
       - name: Create PHP deployment script
@@ -161,6 +142,13 @@ jobs:
 
           // Define the base path
           $basePath = dirname(__DIR__);
+
+          // Check for .env file
+          $envPath = $basePath . '/.env';
+          if (!file_exists($envPath)) {
+              echo "Error: .env file not found\n";
+              exit(1);
+          }
 
           // Run artisan commands
           $phpBinary = PHP_BINARY;
@@ -215,10 +203,29 @@ jobs:
           echo "<pre>$output</pre>";
           EOF
 
-      # Final step: Notify about manual deployment completion
+      # Deploy to O2switch via FTP with incremental uploads
+      - name: Deploy to O2switch via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          local-dir: ./
+          server-dir: /
+          dangerous-clean-slate: false  # Enable incremental uploads
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/tests/**
+            **/.env.*
+            !**/.env
+
+      # Final step: Notify about deployment completion
       - name: Deployment completion message
         run: |
           echo "Deployment files have been uploaded to the server."
-          echo "The vendor and node_modules directories have been generated using Docker and included in the deployment."
+          echo "The deployment is using incremental uploads, so only changed files were transferred."
+          echo "Composer and NPM dependencies were cached for faster future deployments."
           echo "To complete the deployment, visit https://hameconnes.guillaume-rv.fr/public/deploy.php in your browser."
           echo "This will execute the final deployment steps (running Laravel commands)."
