@@ -152,12 +152,13 @@ jobs:
           echo "CACHE_STORE=database" >> .env
 
           echo "MAIL_MAILER=smtp" >> .env
-          echo "MAIL_HOST=smtp.mailtrap.io" >> .env
-          echo "MAIL_PORT=2525" >> .env
-          echo "MAIL_USERNAME=null" >> .env
-          echo "MAIL_PASSWORD=null" >> .env
-          echo "MAIL_FROM_ADDRESS=noreply@hameconnes.guillaume-rv.fr" >> .env
-          echo "MAIL_FROM_NAME=\"Les Hameçonnés\"" >> .env
+          echo "MAIL_SCHEME=tls" >> .env
+          echo "MAIL_HOST=${{ secrets.SMTP_HOST }}" >> .env
+          echo "MAIL_PORT=${{ secrets.SMTP_PORT }}" >> .env
+          echo "MAIL_USERNAME=${{ secrets.SMTP_USERNAME }}" >> .env
+          echo "MAIL_PASSWORD=\"${{ secrets.SMTP_PASSWORD }}\"" >> .env
+          echo "MAIL_FROM_ADDRESS=${{ secrets.SMTP_FROM }}" >> .env
+          echo "MAIL_FROM_NAME=\"${{ secrets.SMTP_FROM_NAME }}\"" >> .env
 
           echo "VITE_APP_NAME=\"Les Hameçonnés\"" >> .env
           echo "VITE_MAPBOX_TOKEN=\"pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg\"" >> .env
