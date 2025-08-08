@@ -3,8 +3,24 @@
  * Deployment script for Les Hameçonnés
  *
  * This script performs post-deployment tasks that would normally be executed via SSH:
- * - Renames .env.production to .env
+ * - Preserves database credentials in the .env file
+ * - Sets proper permissions for storage and bootstrap/cache directories
  * - Runs Laravel artisan commands for caching and migrations
+ * - Ensures the Vite manifest exists and is valid
+ *
+ * VITE MANIFEST HANDLING:
+ * This script implements a multi-tiered approach to ensure the Vite manifest is always available:
+ * 1. Validates any existing manifest file
+ * 2. Attempts to rebuild assets using npm if available
+ * 3. Attempts to rebuild assets using Docker if available
+ * 4. Creates a minimal manifest file as a fallback
+ *
+ * TROUBLESHOOTING:
+ * If you encounter the "Vite manifest not found" error:
+ * 1. Run this script manually by visiting https://hameconnes.guillaume-rv.fr/public/deploy.php
+ * 2. Check the logs for any errors during the manifest creation process
+ * 3. Verify that the public/build directory has the correct permissions (should be 755)
+ * 4. If using Docker, ensure Docker is available on the server
  *
  * SECURITY NOTICE:
  * This script should be protected with a deployment token to prevent unauthorized access.
@@ -249,20 +265,83 @@ $manifestPath = $basePath . '/public/build/manifest.json';
 $buildDir = $basePath . '/public/build';
 
 echo "Checking for Vite manifest at: $manifestPath\n";
-if (!file_exists($manifestPath)) {
-    echo "Vite manifest not found. Checking if build directory exists...\n";
 
-    // Create build directory if it doesn't exist
-    if (!is_dir($buildDir)) {
-        echo "Build directory not found. Creating it...\n";
-        if (!mkdir($buildDir, 0755, true)) {
-            echo "Failed to create build directory\n";
+// Always ensure the build directory exists
+if (!is_dir($buildDir)) {
+    echo "Build directory not found. Creating it...\n";
+    if (!mkdir($buildDir, 0755, true)) {
+        echo "Failed to create build directory. Attempting with Docker...\n";
+
+        // Try using Docker to create the directory
+        $dockerResult = runCommand("docker run --rm -v \"$basePath:/app\" -w /app alpine mkdir -p /app/public/build", $basePath);
+
+        if ($dockerResult['code'] !== 0) {
+            echo "Failed to create build directory with Docker. Using PHP fallback...\n";
+
+            // Last resort: try to create directory with different permissions
+            if (!@mkdir($buildDir, 0777, true)) {
+                echo "WARNING: Could not create build directory. Will attempt to create manifest anyway.\n";
+            } else {
+                $createdFiles[] = $buildDir;
+                echo "Build directory created successfully with fallback permissions\n";
+
+                // Set more permissive permissions to ensure we can write files
+                @chmod($buildDir, 0777);
+            }
         } else {
             $createdFiles[] = $buildDir;
-            echo "Build directory created successfully\n";
+            echo "Build directory created successfully using Docker\n";
         }
+    } else {
+        $createdFiles[] = $buildDir;
+        echo "Build directory created successfully\n";
     }
+}
 
+// Always create the assets directory
+$assetsDir = $buildDir . '/assets';
+if (!is_dir($assetsDir)) {
+    echo "Assets directory not found. Creating it...\n";
+    if (!mkdir($assetsDir, 0755, true)) {
+        echo "Failed to create assets directory. Using fallback...\n";
+
+        // Try with more permissive permissions
+        if (!@mkdir($assetsDir, 0777, true)) {
+            echo "WARNING: Could not create assets directory. Will attempt to create manifest anyway.\n";
+        } else {
+            $createdFiles[] = $assetsDir;
+            echo "Assets directory created successfully with fallback permissions\n";
+
+            // Set more permissive permissions
+            @chmod($assetsDir, 0777);
+        }
+    } else {
+        $createdFiles[] = $assetsDir;
+        echo "Assets directory created successfully\n";
+    }
+}
+
+// First try: Check if we can use the existing manifest
+if (file_exists($manifestPath) && filesize($manifestPath) > 0) {
+    echo "Vite manifest found. Validating...\n";
+
+    // Validate the manifest file
+    $manifestContent = @file_get_contents($manifestPath);
+    $manifestData = @json_decode($manifestContent, true);
+
+    if ($manifestData && is_array($manifestData) && !empty($manifestData)) {
+        echo "Vite manifest is valid. No need to rebuild assets.\n";
+    } else {
+        echo "Vite manifest exists but is invalid. Will recreate it.\n";
+        $needToCreateManifest = true;
+    }
+} else {
+    echo "Vite manifest not found or empty. Will create it.\n";
+    $needToCreateManifest = true;
+}
+
+// Second try: Use npm if available
+if (isset($needToCreateManifest) && $needToCreateManifest) {
     // Check if npm is available
     $npmCheckResult = runCommand("which npm || where npm 2>/dev/null", $basePath);
     if ($npmCheckResult['code'] === 0) {
@@ -272,9 +351,9 @@ if (!file_exists($manifestPath)) {
         runCommand("npm install", $basePath);
         runCommand("npm run build", $basePath);
 
-        if (file_exists($manifestPath)) {
+        if (file_exists($manifestPath) && filesize($manifestPath) > 0) {
             $createdFiles[] = $manifestPath;
-            echo "Vite manifest successfully created\n";
+            echo "Vite manifest successfully created with npm\n";
 
             // Track all files in the build directory
             $buildFiles = new RecursiveIteratorIterator(
@@ -287,16 +366,60 @@ if (!file_exists($manifestPath)) {
                     $createdFiles[] = $fileinfo->getPathname();
                 }
             }
+
+            $needToCreateManifest = false;
         } else {
-            echo "Failed to create Vite manifest with npm. Creating a minimal manifest file as fallback...\n";
-            createMinimalManifest($manifestPath);
+            echo "Failed to create Vite manifest with npm. Will try Docker next...\n";
         }
     } else {
-        echo "NPM not available on the server. Creating a minimal manifest file as fallback...\n";
-        createMinimalManifest($manifestPath);
+        echo "NPM not available on the server. Will try Docker next...\n";
     }
-} else {
-    echo "Vite manifest found. No need to rebuild assets.\n";
+}
+
+// Third try: Use Docker if available
+if (isset($needToCreateManifest) && $needToCreateManifest) {
+    // Check if Docker is available
+    $dockerCheckResult = runCommand("which docker || where docker 2>/dev/null", $basePath);
+    if ($dockerCheckResult['code'] === 0) {
+        echo "Docker is available. Attempting to rebuild assets with Docker...\n";
+
+        // Use Docker to build assets
+        $dockerBuildResult = runCommand(
+            "docker run --rm -v \"$basePath:/app\" -w /app node:20-alpine sh -c \"npm install && npm run build\"",
+            $basePath
+        );
+
+        if (file_exists($manifestPath) && filesize($manifestPath) > 0) {
+            $createdFiles[] = $manifestPath;
+            echo "Vite manifest successfully created with Docker\n";
+
+            // Track all files in the build directory
+            if (is_dir($buildDir)) {
+                $buildFiles = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($buildDir, RecursiveDirectoryIterator::SKIP_DOTS),
+                    RecursiveIteratorIterator::CHILD_FIRST
+                );
+
+                foreach ($buildFiles as $fileinfo) {
+                    if (!$fileinfo->isDir()) {
+                        $createdFiles[] = $fileinfo->getPathname();
+                    }
+                }
+            }
+
+            $needToCreateManifest = false;
+        } else {
+            echo "Failed to create Vite manifest with Docker. Will use fallback mechanism...\n";
+        }
+    } else {
+        echo "Docker not available on the server. Will use fallback mechanism...\n";
+    }
+}
+
+// Final fallback: Create a minimal manifest
+if (isset($needToCreateManifest) && $needToCreateManifest) {
+    echo "Creating a minimal manifest file as final fallback...\n";
+    createMinimalManifest($manifestPath);
 }
 
 // Set proper permissions for build directory if it exists
@@ -323,39 +446,108 @@ function createMinimalManifest($manifestPath) {
         ]
     ];
 
-    // Create the assets directory if it doesn't exist
+    // The assets directory should already be created by the main script
+    // but we'll double-check just to be safe
     $assetsDir = dirname($manifestPath) . '/assets';
     if (!is_dir($assetsDir)) {
-        if (!mkdir($assetsDir, 0755, true)) {
-            echo "Failed to create assets directory\n";
-            return false;
+        echo "Assets directory still doesn't exist. Making one final attempt...\n";
+
+        // Try with error suppression and maximum permissions
+        if (!@mkdir($assetsDir, 0777, true)) {
+            // Try with Docker as a last resort
+            $basePath = dirname(dirname($manifestPath));
+            $dockerResult = runCommand("docker run --rm -v \"$basePath:/app\" -w /app alpine mkdir -p /app/public/build/assets", $basePath);
+
+            if ($dockerResult['code'] !== 0) {
+                echo "CRITICAL ERROR: Could not create assets directory by any means.\n";
+                echo "Attempting to create manifest without asset files...\n";
+            } else {
+                $createdFiles[] = $assetsDir;
+                echo "Created assets directory using Docker\n";
+            }
+        } else {
+            $createdFiles[] = $assetsDir;
+            echo "Created assets directory with fallback permissions\n";
+            @chmod($assetsDir, 0777);
         }
-        $createdFiles[] = $assetsDir;
-        echo "Created directory: " . $assetsDir . "\n";
     }
 
-    // Create minimal CSS file
-    $minimalCss = "/* Minimal CSS file created by deployment script */\n";
-    $cssFile = $assetsDir . '/app-minimal.css';
-    if (file_put_contents($cssFile, $minimalCss)) {
-        $createdFiles[] = $cssFile;
-        echo "Created file: " . $cssFile . "\n";
+    // Create minimal CSS file with error handling
+    if (is_dir($assetsDir)) {
+        $minimalCss = "/* Minimal CSS file created by deployment script */\n";
+        $cssFile = $assetsDir . '/app-minimal.css';
+
+        // Try to write the file with error suppression
+        if (@file_put_contents($cssFile, $minimalCss)) {
+            $createdFiles[] = $cssFile;
+            echo "Created file: " . $cssFile . "\n";
+
+            // Ensure the file is readable
+            @chmod($cssFile, 0644);
+        } else {
+            echo "Warning: Failed to create minimal CSS file\n";
+        }
+
+        // Create minimal JS file with error handling
+        $minimalJs = "// Minimal JS file created by deployment script\n";
+        $jsFile = $assetsDir . '/app-minimal.js';
+
+        // Try to write the file with error suppression
+        if (@file_put_contents($jsFile, $minimalJs)) {
+            $createdFiles[] = $jsFile;
+            echo "Created file: " . $jsFile . "\n";
+
+            // Ensure the file is readable
+            @chmod($jsFile, 0644);
+        } else {
+            echo "Warning: Failed to create minimal JS file\n";
+        }
     }
 
-    // Create minimal JS file
-    $minimalJs = "// Minimal JS file created by deployment script\n";
-    $jsFile = $assetsDir . '/app-minimal.js';
-    if (file_put_contents($jsFile, $minimalJs)) {
-        $createdFiles[] = $jsFile;
-        echo "Created file: " . $jsFile . "\n";
-    }
+    // Write the manifest file with multiple fallbacks
+    $manifestJson = json_encode($minimalManifest, JSON_PRETTY_PRINT);
+    $result = @file_put_contents($manifestPath, $manifestJson);
 
-    // Write the manifest file
-    $result = file_put_contents($manifestPath, json_encode($minimalManifest, JSON_PRETTY_PRINT));
+    if (!$result) {
+        echo "Failed to create manifest file directly. Trying with more permissions...\n";
+
+        // Try to make the directory writable
+        @chmod(dirname($manifestPath), 0777);
+
+        // Try again with error suppression
+        $result = @file_put_contents($manifestPath, $manifestJson);
+
+        if (!$result) {
+            echo "Still failed. Trying with Docker as last resort...\n";
+
+            // Create a temporary file
+            $tempFile = tempnam(sys_get_temp_dir(), 'manifest');
+            file_put_contents($tempFile, $manifestJson);
+
+            // Use Docker to copy it to the right place
+            $basePath = dirname(dirname($manifestPath));
+            $dockerResult = runCommand("docker run --rm -v \"$basePath:/app\" -v \"$tempFile:/tmp/manifest.json\" -w /app alpine cp /tmp/manifest.json /app/public/build/manifest.json", $basePath);
+
+            if ($dockerResult['code'] === 0) {
+                $result = true;
+                echo "Created manifest file using Docker\n";
+            } else {
+                echo "CRITICAL ERROR: All attempts to create manifest file failed.\n";
+                echo "Please check server permissions and configuration.\n";
+            }
+
+            // Clean up temp file
+            @unlink($tempFile);
+        }
+    }
 
     if ($result) {
         $createdFiles[] = $manifestPath;
         echo "Minimal Vite manifest file created successfully\n";
+
+        // Ensure the file is readable
+        @chmod($manifestPath, 0644);
+
         return true;
     } else {
         echo "Failed to create minimal Vite manifest file\n";
@@ -436,10 +628,16 @@ if ($isPost) {
                 border-radius: 5px;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }
-            h1 {
+            h1, h2 {
                 color: #333;
+            }
+            h1 {
                 border-bottom: 1px solid #eee;
                 padding-bottom: 10px;
+            }
+            h2 {
+                margin-top: 30px;
+                font-size: 1.5em;
             }
             pre {
                 background-color: #f8f8f8;
@@ -453,25 +651,55 @@ if ($isPost) {
                 color: #28a745;
                 font-weight: bold;
             }
+            .error {
+                color: #dc3545;
+                font-weight: bold;
+            }
             .timestamp {
                 color: #6c757d;
                 font-size: 0.9em;
                 margin-bottom: 20px;
             }
-            .created-files {
-                background-color: #f0fff0;
-                border: 1px solid #d0e9c6;
+            .created-files, .manifest-status {
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
                 border-radius: 5px;
-                padding: 10px 15px;
+                padding: 15px;
                 margin-bottom: 20px;
             }
-            .created-files ul {
-                margin: 0;
+            .created-files {
+                background-color: #f0fff0;
+                border-color: #d0e9c6;
+            }
+            .created-files ul, .manifest-status ul {
+                margin: 10px 0;
                 padding-left: 20px;
             }
-            .created-files li {
+            .created-files li, .manifest-status li {
                 margin-bottom: 5px;
+            }
+            .created-files li {
                 font-family: monospace;
+            }
+            .status-item {
+                margin-bottom: 15px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #eee;
+            }
+            .status-item:last-child {
+                border-bottom: none;
+                margin-bottom: 0;
+                padding-bottom: 0;
+            }
+            .manifest-content {
+                max-height: 200px;
+                overflow-y: auto;
+                margin-top: 10px;
+                font-size: 12px;
+            }
+            .status-item strong {
+                display: block;
+                margin-bottom: 5px;
             }
         </style>
     </head>
@@ -480,6 +708,54 @@ if ($isPost) {
             <h1>Les Hameçonnés - Deployment Status</h1>
             <p class="timestamp">Executed at: <?php echo date('Y-m-d H:i:s'); ?></p>
             <p class="success">✅ Deployment completed successfully!</p>
+
+            <h2>Vite Manifest Status:</h2>
+            <div class="manifest-status">
+                <?php
+                $manifestPath = $basePath . '/public/build/manifest.json';
+                $manifestExists = file_exists($manifestPath);
+                $manifestValid = false;
+                $manifestSize = 0;
+                $manifestContent = '';
+
+                if ($manifestExists) {
+                    $manifestSize = filesize($manifestPath);
+                    $manifestContent = @file_get_contents($manifestPath);
+                    $manifestData = @json_decode($manifestContent, true);
+                    $manifestValid = $manifestData && is_array($manifestData) && !empty($manifestData);
+                }
+                ?>
+
+                <div class="status-item <?php echo $manifestExists ? 'success' : 'error'; ?>">
+                    <strong>Manifest File:</strong>
+                    <?php echo $manifestExists ? 'Exists ✓' : 'Missing ✗'; ?>
+                    <?php if ($manifestExists): ?>
+                        (Size: <?php echo $manifestSize; ?> bytes)
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($manifestExists): ?>
+                <div class="status-item <?php echo $manifestValid ? 'success' : 'error'; ?>">
+                    <strong>Manifest Validity:</strong>
+                    <?php echo $manifestValid ? 'Valid ✓' : 'Invalid ✗'; ?>
+                </div>
+
+                <div class="status-item">
+                    <strong>Manifest Content:</strong>
+                    <pre class="manifest-content"><?php echo htmlspecialchars($manifestContent); ?></pre>
+                </div>
+                <?php endif; ?>
+
+                <div class="status-item">
+                    <strong>Troubleshooting:</strong>
+                    <ul>
+                        <li>If the manifest is missing or invalid, try running this script again.</li>
+                        <li>Check that the public/build directory has the correct permissions (should be 755).</li>
+                        <li>Verify that npm or Docker is available on the server if needed.</li>
+                        <li>For persistent issues, try rebuilding assets locally and uploading them manually.</li>
+                    </ul>
+                </div>
+            </div>
 
             <?php if (!empty($createdFiles)): ?>
             <h2>Files Created During Deployment:</h2>
