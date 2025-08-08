@@ -5,6 +5,7 @@
  * This script performs post-deployment tasks that would normally be executed via SSH:
  * - Preserves database credentials in the .env file
  * - Sets proper permissions for storage and bootstrap/cache directories
+ * - Sets executable permissions for node_modules/.bin files
  * - Runs Laravel artisan commands for caching and migrations
  * - Ensures the Vite manifest exists and is valid
  *
@@ -16,11 +17,18 @@
  * 4. Creates a minimal manifest file as a fallback
  *
  * TROUBLESHOOTING:
+ *
  * If you encounter the "Vite manifest not found" error:
  * 1. Run this script manually by visiting https://hameconnes.guillaume-rv.fr/public/deploy.php
  * 2. Check the logs for any errors during the manifest creation process
  * 3. Verify that the public/build directory has the correct permissions (should be 755)
  * 4. If using Docker, ensure Docker is available on the server
+ *
+ * If you encounter "Permission denied" errors when running npm or node commands:
+ * 1. Run this script manually by visiting https://hameconnes.guillaume-rv.fr/public/deploy.php
+ * 2. Check the logs to verify that executable permissions were set for node_modules/.bin
+ * 3. Manually verify permissions with: ls -la node_modules/.bin
+ * 4. If needed, manually set permissions with: chmod +x node_modules/.bin/*
  *
  * SECURITY NOTICE:
  * This script should be protected with a deployment token to prevent unauthorized access.
@@ -229,9 +237,35 @@ if (is_dir($storageDir)) {
 // Set permissions for bootstrap/cache directory
 if (is_dir($bootstrapCacheDir)) {
     setPermissions($bootstrapCacheDir, 0755, 0644);
-    echo "Set permissions for bootstrap/cache directory\n\n";
+    echo "Set permissions for bootstrap/cache directory\n";
 } else {
-    echo "Warning: bootstrap/cache directory not found\n\n";
+    echo "Warning: bootstrap/cache directory not found\n";
+}
+
+// Set executable permissions for node_modules/.bin directory
+$nodeModulesBinDir = $basePath . '/node_modules/.bin';
+if (is_dir($nodeModulesBinDir)) {
+    echo "Setting executable permissions for node_modules/.bin directory\n";
+
+    // Make the .bin directory accessible
+    if (!chmod($nodeModulesBinDir, 0755)) {
+        echo "Failed to set permissions for directory: $nodeModulesBinDir\n";
+    }
+
+    // Set executable permissions for all files in the .bin directory
+    $binFiles = new FilesystemIterator($nodeModulesBinDir);
+    foreach ($binFiles as $file) {
+        if (!$file->isDir()) {
+            if (!chmod($file->getPathname(), 0755)) {
+                echo "Failed to set executable permissions for: " . $file->getPathname() . "\n";
+            } else {
+                echo "Set executable permissions for: " . basename($file->getPathname()) . "\n";
+            }
+        }
+    }
+    echo "Finished setting executable permissions for node_modules/.bin\n\n";
+} else {
+    echo "Warning: node_modules/.bin directory not found\n\n";
 }
 
 // 2. Run artisan commands
@@ -753,6 +787,85 @@ if ($isPost) {
                         <li>Check that the public/build directory has the correct permissions (should be 755).</li>
                         <li>Verify that npm or Docker is available on the server if needed.</li>
                         <li>For persistent issues, try rebuilding assets locally and uploading them manually.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>Node Modules Bin Permissions:</h2>
+            <div class="manifest-status">
+                <?php
+                $nodeModulesBinDir = $basePath . '/node_modules/.bin';
+                $binDirExists = is_dir($nodeModulesBinDir);
+                $binDirPermissions = $binDirExists ? substr(sprintf('%o', fileperms($nodeModulesBinDir)), -4) : 'N/A';
+                $binDirPermissionsOk = $binDirPermissions === '0755';
+
+                // Check for concurrently executable specifically
+                $concurrentlyPath = $nodeModulesBinDir . '/concurrently';
+                $concurrentlyExists = file_exists($concurrentlyPath);
+                $concurrentlyPermissions = $concurrentlyExists ? substr(sprintf('%o', fileperms($concurrentlyPath)), -4) : 'N/A';
+                $concurrentlyPermissionsOk = $concurrentlyPermissions === '0755';
+
+                // Get a list of a few executables in the bin directory
+                $binFiles = [];
+                if ($binDirExists) {
+                    $iterator = new FilesystemIterator($nodeModulesBinDir);
+                    $count = 0;
+                    foreach ($iterator as $file) {
+                        if (!$file->isDir() && $count < 5) {
+                            $binFiles[] = [
+                                'name' => $file->getFilename(),
+                                'permissions' => substr(sprintf('%o', fileperms($file->getPathname())), -4),
+                                'executable' => is_executable($file->getPathname())
+                            ];
+                            $count++;
+                        }
+                    }
+                }
+                ?>
+
+                <div class="status-item <?php echo $binDirExists ? 'success' : 'error'; ?>">
+                    <strong>Node Modules Bin Directory:</strong>
+                    <?php echo $binDirExists ? 'Exists ✓' : 'Missing ✗'; ?>
+                    <?php if ($binDirExists): ?>
+                        (Permissions: <?php echo $binDirPermissions; ?> - <?php echo $binDirPermissionsOk ? 'Correct ✓' : 'Incorrect ✗'; ?>)
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($binDirExists): ?>
+                <div class="status-item <?php echo $concurrentlyExists ? ($concurrentlyPermissionsOk ? 'success' : 'error') : 'error'; ?>">
+                    <strong>Concurrently Executable:</strong>
+                    <?php if ($concurrentlyExists): ?>
+                        Exists ✓ (Permissions: <?php echo $concurrentlyPermissions; ?> - <?php echo $concurrentlyPermissionsOk ? 'Executable ✓' : 'Not Executable ✗'; ?>)
+                    <?php else: ?>
+                        Missing ✗ (This may cause "Permission denied" errors when running composer dev)
+                    <?php endif; ?>
+                </div>
+
+                <div class="status-item">
+                    <strong>Sample Bin Files:</strong>
+                    <?php if (!empty($binFiles)): ?>
+                        <ul>
+                            <?php foreach ($binFiles as $file): ?>
+                                <li>
+                                    <?php echo htmlspecialchars($file['name']); ?>:
+                                    Permissions <?php echo $file['permissions']; ?> -
+                                    <?php echo $file['executable'] ? '<span class="success">Executable ✓</span>' : '<span class="error">Not Executable ✗</span>'; ?>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p>No bin files found.</p>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <div class="status-item">
+                    <strong>Troubleshooting:</strong>
+                    <ul>
+                        <li>If executables are not marked as executable, try running this script again.</li>
+                        <li>For persistent issues, manually set permissions with: <code>chmod +x node_modules/.bin/*</code></li>
+                        <li>If the node_modules/.bin directory is missing, run <code>npm install</code> to create it.</li>
+                        <li>When running <code>composer dev</code>, ensure you're in the project root directory.</li>
                     </ul>
                 </div>
             </div>
