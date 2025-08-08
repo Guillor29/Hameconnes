@@ -1,7 +1,7 @@
 <template>
   <nav class="bg-blue-800 text-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between h-16 min-h-[4rem]">
         <div class="flex items-center">
           <div class="flex-shrink-0">
             <span class="text-xl font-bold">Les Hameçonnés 🎣</span>
@@ -71,7 +71,7 @@
             </div>
           </div>
         </div>
-        <div class="-mr-2 flex md:hidden">
+        <div class="flex md:hidden">
           <!-- Mobile menu button -->
           <button @click="mobileMenuOpen = !mobileMenuOpen" class="bg-blue-800 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-blue-800 focus:ring-white">
             <span class="sr-only">Ouvrir le menu principal</span>
@@ -85,7 +85,7 @@
     </div>
 
     <!-- Mobile menu, show/hide based on menu state. -->
-    <div v-if="mobileMenuOpen" class="md:hidden">
+    <div v-if="mobileMenuOpen" class="md:hidden absolute w-full bg-blue-800 z-10 left-0 shadow-lg">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
         <a href="#" class="block px-3 py-2 rounded-md text-base font-medium bg-blue-900 text-white">
           Accueil
@@ -193,16 +193,17 @@ export default {
     this.fetchCurrentUser();
 
     // Add click outside listener to close dropdown
-    document.addEventListener('click', (event) => {
+    this.handleClickOutside = (event) => {
       const dropdown = this.$el.querySelector('.ml-3.relative');
       if (dropdown && !dropdown.contains(event.target)) {
         this.closeProfileDropdown();
       }
-    });
+    };
+    document.addEventListener('click', this.handleClickOutside);
   },
   beforeUnmount() {
-    // Remove click outside listener
-    document.removeEventListener('click', this.closeProfileDropdown);
+    // Remove click outside listener with the same function reference
+    document.removeEventListener('click', this.handleClickOutside);
   }
 }
 </script>
