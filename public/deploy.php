@@ -241,6 +241,9 @@ runCommand("$phpBinary $artisanPath view:cache", $basePath);
 // Run migrations
 runCommand("$phpBinary $artisanPath migrate --force", $basePath);
 
+// Global array to track files created during deployment
+$createdFiles = [];
+
 // Check for Vite manifest and rebuild assets if needed
 $manifestPath = $basePath . '/public/build/manifest.json';
 $buildDir = $basePath . '/public/build';
@@ -255,6 +258,7 @@ if (!file_exists($manifestPath)) {
         if (!mkdir($buildDir, 0755, true)) {
             echo "Failed to create build directory\n";
         } else {
+            $createdFiles[] = $buildDir;
             echo "Build directory created successfully\n";
         }
     }
@@ -269,7 +273,20 @@ if (!file_exists($manifestPath)) {
         runCommand("npm run build", $basePath);
 
         if (file_exists($manifestPath)) {
+            $createdFiles[] = $manifestPath;
             echo "Vite manifest successfully created\n";
+
+            // Track all files in the build directory
+            $buildFiles = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($buildDir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+
+            foreach ($buildFiles as $fileinfo) {
+                if (!$fileinfo->isDir()) {
+                    $createdFiles[] = $fileinfo->getPathname();
+                }
+            }
         } else {
             echo "Failed to create Vite manifest with npm. Creating a minimal manifest file as fallback...\n";
             createMinimalManifest($manifestPath);
@@ -290,6 +307,8 @@ if (is_dir($buildDir)) {
 
 // Function to create a minimal Vite manifest file
 function createMinimalManifest($manifestPath) {
+    global $createdFiles;
+
     // Create a minimal manifest with entries for the main CSS and JS files
     $minimalManifest = [
         "resources/css/app.css" => [
@@ -311,26 +330,67 @@ function createMinimalManifest($manifestPath) {
             echo "Failed to create assets directory\n";
             return false;
         }
+        $createdFiles[] = $assetsDir;
+        echo "Created directory: " . $assetsDir . "\n";
     }
 
     // Create minimal CSS file
     $minimalCss = "/* Minimal CSS file created by deployment script */\n";
-    file_put_contents($assetsDir . '/app-minimal.css', $minimalCss);
+    $cssFile = $assetsDir . '/app-minimal.css';
+    if (file_put_contents($cssFile, $minimalCss)) {
+        $createdFiles[] = $cssFile;
+        echo "Created file: " . $cssFile . "\n";
+    }
 
     // Create minimal JS file
     $minimalJs = "// Minimal JS file created by deployment script\n";
-    file_put_contents($assetsDir . '/app-minimal.js', $minimalJs);
+    $jsFile = $assetsDir . '/app-minimal.js';
+    if (file_put_contents($jsFile, $minimalJs)) {
+        $createdFiles[] = $jsFile;
+        echo "Created file: " . $jsFile . "\n";
+    }
 
     // Write the manifest file
     $result = file_put_contents($manifestPath, json_encode($minimalManifest, JSON_PRETTY_PRINT));
 
     if ($result) {
+        $createdFiles[] = $manifestPath;
         echo "Minimal Vite manifest file created successfully\n";
         return true;
     } else {
         echo "Failed to create minimal Vite manifest file\n";
         return false;
     }
+}
+
+// Update deployment manifest with created files
+$manifestFilePath = $basePath . '/deployment-manifest.txt';
+if (file_exists($manifestFilePath)) {
+    echo "\nUpdating deployment manifest with created files...\n";
+
+    // Read the existing manifest
+    $manifestContent = file_get_contents($manifestFilePath);
+
+    // Add created files section
+    if (!empty($createdFiles)) {
+        $manifestContent .= "\nFiles created during deployment:\n";
+        foreach ($createdFiles as $file) {
+            // Convert to relative path for cleaner output
+            $relativePath = str_replace($basePath . '/', '', $file);
+            $manifestContent .= $relativePath . "\n";
+        }
+    } else {
+        $manifestContent .= "\nNo files were created during this deployment.\n";
+    }
+
+    // Write the updated manifest
+    if (file_put_contents($manifestFilePath, $manifestContent)) {
+        echo "Deployment manifest updated successfully.\n";
+    } else {
+        echo "Failed to update deployment manifest.\n";
+    }
+} else {
+    echo "\nDeployment manifest file not found. Cannot update with created files.\n";
 }
 
 // Log the end of deployment
@@ -398,6 +458,21 @@ if ($isPost) {
                 font-size: 0.9em;
                 margin-bottom: 20px;
             }
+            .created-files {
+                background-color: #f0fff0;
+                border: 1px solid #d0e9c6;
+                border-radius: 5px;
+                padding: 10px 15px;
+                margin-bottom: 20px;
+            }
+            .created-files ul {
+                margin: 0;
+                padding-left: 20px;
+            }
+            .created-files li {
+                margin-bottom: 5px;
+                font-family: monospace;
+            }
         </style>
     </head>
     <body>
@@ -405,6 +480,18 @@ if ($isPost) {
             <h1>Les Hameçonnés - Deployment Status</h1>
             <p class="timestamp">Executed at: <?php echo date('Y-m-d H:i:s'); ?></p>
             <p class="success">✅ Deployment completed successfully!</p>
+
+            <?php if (!empty($createdFiles)): ?>
+            <h2>Files Created During Deployment:</h2>
+            <div class="created-files">
+                <ul>
+                    <?php foreach ($createdFiles as $file): ?>
+                        <li><?php echo htmlspecialchars(str_replace($basePath . '/', '', $file)); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+            <?php endif; ?>
+
             <h2>Deployment Log:</h2>
             <pre><?php echo htmlspecialchars($output); ?></pre>
             <p>
