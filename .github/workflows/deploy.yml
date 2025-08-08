@@ -198,9 +198,8 @@ jobs:
             **/tests/**
             **/.env.*
             !**/.env
-          include: |
-            # Always include these directories/files even with incremental uploads
-            public/build/**  # Always include the build directory and its contents
+            # Use negation pattern to ensure build directory is always included
+            !public/build/**  # Always include the build directory and its contents
             # This ensures the Vite manifest and assets are always uploaded
 
       # Final step: Notify about deployment completion

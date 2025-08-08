@@ -191,9 +191,20 @@ if (file_exists($envPath)) {
     }
 
     // Restore Vite environment variables
+    // IMPORTANT: The Mapbox token must be properly formatted with quotes in the .env file
+    // This is critical for the token to be correctly passed to the JavaScript application
+    // Without proper formatting, you may see "An API access token is required" errors
     if (!empty($viteEnvVars['VITE_MAPBOX_TOKEN'])) {
-        $envContent = preg_replace('/VITE_MAPBOX_TOKEN=.*/', 'VITE_MAPBOX_TOKEN=' . $viteEnvVars['VITE_MAPBOX_TOKEN'], $envContent);
+        // Extract the token value and remove any existing quotes
+        $tokenValue = trim($viteEnvVars['VITE_MAPBOX_TOKEN'], '"\'');
+
+        // Always add quotes around the token value for consistency
+        $envContent = preg_replace('/VITE_MAPBOX_TOKEN=.*/', 'VITE_MAPBOX_TOKEN="' . $tokenValue . '"', $envContent);
+
         echo "Preserved VITE_MAPBOX_TOKEN: (value hidden for security)\n";
+        // Log the first few characters of the token for debugging (securely)
+        $tokenPreview = substr($tokenValue, 0, 10) . "...";
+        echo "Token preview: " . $tokenPreview . "\n";
     } else {
         // If VITE_MAPBOX_TOKEN is not found in the existing .env file, add it
         $mapboxToken = "pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg";
@@ -204,6 +215,24 @@ if (file_exists($envPath)) {
             $envContent = preg_replace('/VITE_MAPBOX_TOKEN=.*/', 'VITE_MAPBOX_TOKEN="' . $mapboxToken . '"', $envContent);
             echo "Updated VITE_MAPBOX_TOKEN in .env file\n";
         }
+        // Log the first few characters of the token for debugging (securely)
+        $tokenPreview = substr($mapboxToken, 0, 10) . "...";
+        echo "Token preview: " . $tokenPreview . "\n";
+    }
+
+    // Final verification of token format
+    // This ensures the token is properly formatted with quotes in the .env file
+    if (strpos($envContent, 'VITE_MAPBOX_TOKEN="') === false) {
+        echo "WARNING: Mapbox token is not properly formatted with quotes. Fixing...\n";
+        // Extract the token value without quotes
+        if (preg_match('/VITE_MAPBOX_TOKEN=([^\r\n]*)/', $envContent, $matches)) {
+            $tokenValue = trim($matches[1], '"\'');
+            // Add quotes around the token value
+            $envContent = preg_replace('/VITE_MAPBOX_TOKEN=.*/', 'VITE_MAPBOX_TOKEN="' . $tokenValue . '"', $envContent);
+            echo "Fixed Mapbox token formatting\n";
+        }
+    } else {
+        echo "Mapbox token is properly formatted with quotes ✓\n";
     }
 
     // Write the updated content back to the .env file
@@ -764,6 +793,60 @@ if ($isPost) {
             <h1>Les Hameçonnés - Deployment Status</h1>
             <p class="timestamp">Executed at: <?php echo date('Y-m-d H:i:s'); ?></p>
             <p class="success">✅ Deployment completed successfully!</p>
+
+            <h2>Mapbox Token Status:</h2>
+            <div class="manifest-status">
+                <?php
+                // Check for .env file and Mapbox token
+                $envPath = $basePath . '/.env';
+                $envExists = file_exists($envPath);
+                $mapboxTokenExists = false;
+                $mapboxTokenValue = '';
+                $mapboxTokenPreview = '';
+
+                if ($envExists) {
+                    $envContent = @file_get_contents($envPath);
+                    if (preg_match('/VITE_MAPBOX_TOKEN=([^\r\n]*)/', $envContent, $matches)) {
+                        $mapboxTokenExists = true;
+                        $mapboxTokenValue = trim($matches[1], '"\'');
+                        $mapboxTokenPreview = substr($mapboxTokenValue, 0, 15) . '...';
+                    }
+                }
+                ?>
+
+                <div class="status-item <?php echo $envExists ? 'success' : 'error'; ?>">
+                    <strong>.env File:</strong>
+                    <?php echo $envExists ? 'Exists ✓' : 'Missing ✗'; ?>
+                </div>
+
+                <div class="status-item <?php echo $mapboxTokenExists ? 'success' : 'error'; ?>">
+                    <strong>Mapbox Token:</strong>
+                    <?php if ($mapboxTokenExists): ?>
+                        Found ✓ (Preview: <?php echo htmlspecialchars($mapboxTokenPreview); ?>)
+                    <?php else: ?>
+                        Missing ✗ (This will cause Mapbox GL errors)
+                    <?php endif; ?>
+                </div>
+
+                <div class="status-item">
+                    <strong>Troubleshooting:</strong>
+                    <ul>
+                        <li>If the Mapbox token is missing, try running this script again.</li>
+                        <li>Verify that the token is correctly formatted with quotes in the .env file.</li>
+                        <li>Check that the token is valid and has the correct permissions.</li>
+                        <li>For persistent issues, try manually adding the token to the .env file:</li>
+                        <li><code>VITE_MAPBOX_TOKEN="pk.eyJ1IjoiZ3VpbGxvciIsImEiOiJjazI0d25kZncyNnU5M2NtdmphaDR0bHcwIn0.XyxG_qYLs_RrQOwkFFomQg"</code></li>
+                    </ul>
+                </div>
+
+                <div class="status-item">
+                    <strong>Verifying Token in Browser:</strong>
+                    <p>To verify the Mapbox token is accessible to your JavaScript application, open your browser's developer console and run:</p>
+                    <pre>console.log("Mapbox Token:", import.meta.env.VITE_MAPBOX_TOKEN);</pre>
+                    <p>If it shows "undefined" or is empty, the token is not being properly passed to the frontend.</p>
+                    <p>You can also check for Mapbox errors in the console that mention "An API access token is required".</p>
+                </div>
+            </div>
 
             <h2>Vite Manifest Status:</h2>
             <div class="manifest-status">
