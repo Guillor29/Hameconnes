@@ -8,7 +8,7 @@
           </div>
           <div class="hidden md:block">
             <div class="ml-10 flex items-baseline space-x-4">
-              <a href="#" class="px-3 py-2 rounded-md text-sm font-medium bg-blue-900 text-white">
+              <a href="/" class="px-3 py-2 rounded-md text-sm font-medium bg-blue-900 text-white">
                 Accueil
               </a>
               <a href="/fishing-spots" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-blue-700 hover:text-white">
@@ -87,7 +87,7 @@
     <!-- Mobile menu, show/hide based on menu state. -->
     <div v-if="mobileMenuOpen" class="md:hidden absolute w-full bg-blue-800 z-10 left-0 shadow-lg">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-        <a href="#" class="block px-3 py-2 rounded-md text-base font-medium bg-blue-900 text-white">
+        <a href="/" class="block px-3 py-2 rounded-md text-base font-medium bg-blue-900 text-white">
           Accueil
         </a>
         <a href="/fishing-spots" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-blue-700 hover:text-white">

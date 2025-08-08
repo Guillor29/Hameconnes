@@ -281,6 +281,7 @@ export default {
     return {
       map: null,
       markers: [],
+      markersById: {},
       fishingSpots: [],
       fishSpecies: [],
       currentUser: null,
@@ -379,20 +380,40 @@ export default {
           // Make sure spot has valid coordinates
           if (!spot.longitude || !spot.latitude) return false;
 
-          // Calculate distance (approximate)
-          const dx = (clickLng - spot.longitude) * Math.cos((clickLat + spot.latitude) / 2);
-          const dy = clickLat - spot.latitude;
-          const distance = Math.sqrt(dx * dx + dy * dy) * 111000; // Rough conversion to meters
+          // Calculate distance (approximate, meters) with proper radian conversion
+          const spotLng = parseFloat(spot.longitude);
+          const spotLat = parseFloat(spot.latitude);
+          if (isNaN(spotLng) || isNaN(spotLat)) return false;
+          const toRad = (deg) => deg * Math.PI / 180;
+          const latAvgRad = toRad((clickLat + spotLat) / 2);
+          const dx = (clickLng - spotLng) * Math.cos(latAvgRad);
+          const dy = clickLat - spotLat;
+          const distance = Math.sqrt(dx * dx + dy * dy) * 111000; // Rough meters
 
-          // Consider it a click on a marker if within 15 meters
-          return distance < 15;
+          // Consider it a click on a marker if within 25 meters
+          return distance < 25;
         });
 
-        // Only open the "Add new fishing spot" modal if the click was not near an existing spot
-        if (!nearbySpot) {
-          this.handleMapClick(e);
+        // If the click was near an existing spot, open that spot's popup
+        if (nearbySpot) {
+          const marker = this.markersById ? this.markersById[nearbySpot.id] : null;
+          if (marker) {
+            try {
+              // Open the popup anchored to the marker
+              marker.togglePopup();
+            } catch (err) {
+              // Fallback: dispatch a click on the marker element
+              const el = marker.getElement && marker.getElement();
+              if (el) {
+                el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              }
+            }
+          }
+          return; // Do not open creation modal
         }
-        // If click was near a spot, the marker's popup will handle the click
+
+        // Otherwise, open the creation modal at the clicked location
+        this.handleMapClick(e);
       });
     },
 
@@ -425,6 +446,7 @@ export default {
       // Clear existing markers
       this.markers.forEach(marker => marker.remove());
       this.markers = [];
+      this.markersById = {};
 
       // Add markers for each fishing spot
       this.fishingSpots.forEach(spot => {
@@ -628,7 +650,18 @@ export default {
         .setPopup(popup)
         .addTo(this.map);
 
+      // Prevent map click handler from firing when clicking on this marker
+      const el = marker.getElement();
+      ['click', 'mousedown', 'touchstart', 'dblclick'].forEach((evtName) => {
+        el.addEventListener(evtName, (ev) => {
+          ev.stopPropagation();
+        });
+      });
+
       this.markers.push(marker);
+      if (spot && spot.id != null) {
+        this.markersById[spot.id] = marker;
+      }
     },
 
     getWaterTypeLabel(waterType) {
