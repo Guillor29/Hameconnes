@@ -65,7 +65,8 @@
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">{{ spot.name }}</div>
                 <div class="text-xs text-gray-500">
-                  {{ spot.latitude.toFixed(4) }}, {{ spot.longitude.toFixed(4) }}
+                  {{ typeof spot.latitude === 'number' ? spot.latitude.toFixed(4) : (parseFloat(spot.latitude) || 0).toFixed(4) }},
+                  {{ typeof spot.longitude === 'number' ? spot.longitude.toFixed(4) : (parseFloat(spot.longitude) || 0).toFixed(4) }}
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
